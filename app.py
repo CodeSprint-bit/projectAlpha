@@ -1,0 +1,297 @@
+from flask import Flask, render_template, request
+from werkzeug.utils import secure_filename
+
+import os
+import uuid
+
+from utils import process_document
+
+app = Flask(__name__)
+
+# =========================================================
+# CONFIGURATION
+# =========================================================
+
+app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
+
+UPLOAD_FOLDER = "uploads"
+
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png"}
+
+# =========================================================
+# FILE VALIDATION
+# =========================================================
+
+
+def allowed_file(filename):
+
+    return ("." in filename
+            and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS)
+
+
+def save_uploaded_file(file):
+
+    original_filename = secure_filename(file.filename)
+
+    extension = original_filename.rsplit(".", 1)[1].lower()
+
+    filename = (str(uuid.uuid4()) + "." + extension)
+
+    filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+
+    file.save(filepath)
+
+    return filepath, filename
+
+
+def delete_file(filepath):
+    try:
+        if os.path.exists(filepath):
+            os.remove(filepath)
+    except OSError as e:
+        print(f"Could not delete file: {e}")
+
+
+# =========================================================
+# HOME
+# =========================================================
+
+
+@app.route("/")
+def home():
+
+    return render_template("index.html")
+
+
+# =========================================================
+# WEB VERIFICATION
+# =========================================================
+
+
+@app.route("/verify", methods=["GET", "POST"])
+def verify():
+
+    if request.method == "GET":
+
+        return render_template("verify.html")
+
+    # -----------------------------------------
+    # Get form data
+    # -----------------------------------------
+
+    docType = request.form.get("documentType")
+
+    name = request.form.get("name")
+
+    document = request.form.get("document")
+
+    # -----------------------------------------
+    # Validate document type
+    # -----------------------------------------
+
+    if docType not in ["pan", "aadhaar", "visa"]:
+
+        return render_template("verify.html", error="Invalid document type")
+
+    # -----------------------------------------
+    # Validate name
+    # -----------------------------------------
+
+    if not name or not name.strip():
+
+        return render_template("verify.html", error="Name is required")
+
+    # -----------------------------------------
+    # Validate document number
+    # -----------------------------------------
+
+    if not document or not document.strip():
+
+        return render_template("verify.html",
+                               error="Document number is required")
+
+    # -----------------------------------------
+    # Get file
+    # -----------------------------------------
+
+    file = request.files.get("documentFile")
+
+    if not file:
+
+        return render_template("verify.html", error="No file uploaded")
+
+    if file.filename == "":
+
+        return render_template("verify.html", error="No file selected")
+
+    # -----------------------------------------
+    # Validate extension
+    # -----------------------------------------
+
+    if not allowed_file(file.filename):
+
+        return render_template("verify.html", error="Invalid file type")
+
+    # -----------------------------------------
+    # Save file
+    # -----------------------------------------
+
+    filepath, filename = save_uploaded_file(file)
+
+    # -----------------------------------------
+    # Process document
+    # -----------------------------------------
+
+    result = process_document(docType, name, document, filepath)
+
+    # -----------------------------------------
+    # Processing error
+    # -----------------------------------------
+
+    if not result["success"]:
+
+        return render_template("verify.html", error=result["error"])
+
+    # -----------------------------------------
+    # Display result
+    # -----------------------------------------
+
+    return render_template(
+        "verify.html",
+        docType=docType,
+        name=name,
+        document=document,
+        filename=filename,
+        extracted_document=result["document"]["detected_number"],
+        document_status=result["document"]["number_match"],
+        name_similarity=result["identity"]["name_similarity"],
+        document_format_valid=result["document"]["format_valid"],
+        risk_score=result["risk"]["score"],
+        risk_level=result["risk"]["level"],
+        status="Analysis Complete")
+
+
+# =========================================================
+# API VERIFICATION
+# =========================================================
+
+
+@app.route("/api/verify", methods=["POST"])
+def api_verify():
+
+    # -----------------------------------------
+    # Get form data
+    # -----------------------------------------
+
+    docType = request.form.get("documentType")
+
+    name = request.form.get("name")
+
+    document = request.form.get("document")
+
+    # -----------------------------------------
+    # Validate document type
+    # -----------------------------------------
+
+    if docType not in ["pan", "aadhaar", "visa"]:
+
+        return {"success": False, "error": "Invalid document type"}, 400
+
+    # -----------------------------------------
+    # Validate name
+    # -----------------------------------------
+
+    if not name or not name.strip():
+
+        return {"success": False, "error": "Name is required"}, 400
+
+    # -----------------------------------------
+    # Validate document number
+    # -----------------------------------------
+
+    if not document or not document.strip():
+
+        return {"success": False, "error": "Document number is required"}, 400
+
+    # -----------------------------------------
+    # Get file
+    # -----------------------------------------
+
+    file = request.files.get("documentFile")
+
+    if not file:
+
+        return {"success": False, "error": "No file uploaded"}, 400
+
+    if file.filename == "":
+
+        return {"success": False, "error": "No file selected"}, 400
+
+    # -----------------------------------------
+    # Validate extension
+    # -----------------------------------------
+
+    if not allowed_file(file.filename):
+
+        return {"success": False, "error": "Invalid file type"}, 400
+
+    # -----------------------------------------
+    # Save file
+    # -----------------------------------------
+
+    filepath, filename = save_uploaded_file(file)
+
+    # -----------------------------------------
+    # Process document
+    # -----------------------------------------
+
+    result = process_document(docType, name, document, filepath)
+
+    delete_file(filepath)
+
+    # -----------------------------------------
+    # Return result
+    # -----------------------------------------
+
+    if not result["success"]:
+
+        return result, 400
+
+    return result, 200
+
+
+# =========================================================
+# HEALTH-CHECK
+# =========================================================
+
+@app.route("/api/health", methods=["GET"])
+def health():
+
+    return {"success": True, "status": "Backend is running"}, 200
+
+
+# =========================================================
+# FILE TOO LARGE
+# =========================================================
+
+
+@app.errorhandler(413)
+def file_too_large(error):
+
+    return {
+        "success": False,
+        "error": "File is too large. Maximum size is 5 MB."
+    }, 413
+
+
+# =========================================================
+# RUN
+# =========================================================
+
+if __name__ == "__main__":
+
+    app.run(debug=True)

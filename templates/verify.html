@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Verify Document</title>
+</head>
+
+<body>
+
+    <h1>Document Verification</h1>
+
+    {% if error %}
+
+    <p>
+        {{ error }}
+    </p>
+
+    {% endif %}
+
+    <form action="/verify" method="POST" enctype="multipart/form-data">
+
+        <label for="documentType">Choose Document Type</label>
+        <select name="documentType" id="documentType" required>
+            <option value="">--Please Choose an option--</option>
+            <option value="aadhaar">Aadhaar</option>
+            <option value="pan">PAN</option>
+            <option value="visa">VISA</option>
+        </select>
+
+        <br><br>
+
+        <label for="name">Name:</label>
+
+        <input type="text" id="name" name="name" required>
+
+        <br><br>
+
+        <label for="document" id="documentLabel">Document Number:</label>
+
+        <input type="text" id="document" name="document" required>
+
+        <br><br>
+
+        <label for="documentFile">Upload Document:</label>
+
+        <input type="file" id="documentFile" name="documentFile" accept=".jpg,.jpeg,.png" required>
+
+        <br><br>
+
+        <button type="submit">
+            Verify
+        </button>
+
+    </form>
+
+    {% if name %}
+
+    <h2>Submitted Information</h2>
+
+    <p>Document Type: {{ docType }}</p>
+
+    <p>Name: {{ name }}</p>
+
+    <p>Document Number: {{ document }}</p>
+
+    <p>Uploaded File: {{ filename }}</p>
+
+
+    <h2>OCR Text</h2>
+
+    <pre>{{ text }}</pre>
+
+
+    <h2>Verification Results</h2>
+
+    <p>
+        Extracted Document Number:
+        {{ extracted_document }}
+    </p>
+
+    <p>
+        Document Validation:
+        {{ document_status }}
+    </p>
+
+    <p>
+        Name Similarity:
+        {{ name_similarity }}%
+    </p>
+
+    <p>
+        Document Format:
+        {% if document_format_valid %}
+        Valid
+        {% else %}
+        Invalid
+        {% endif %}
+    </p>
+
+
+    <h2>Risk Assessment</h2>
+
+    <p>
+        Risk Score:
+        {{ risk_score }}
+    </p>
+
+    <p>
+        Risk Level:
+        {{ risk_level }}
+    </p>
+
+    <p>
+        Status:
+        {{ status }}
+    </p>
+
+    {% endif %}
+
+    {% if error %}
+    <p>{{ error }}</p>
+    {% endif %}
+
+
+    <script>
+
+        const documentType =
+            document.getElementById("documentType");
+
+        const documentLabel =
+            document.getElementById("documentLabel");
+
+        const documentInput =
+            document.getElementById("document");
+
+
+        documentType.addEventListener(
+            "change",
+            function () {
+
+                if (this.value === "pan") {
+
+                    documentLabel.textContent =
+                        "PAN Number:";
+
+                    documentInput.placeholder =
+                        "Enter PAN number";
+
+                }
+
+                else if (this.value === "aadhaar") {
+
+                    documentLabel.textContent =
+                        "Aadhaar Number:";
+
+                    documentInput.placeholder =
+                        "Enter 12-digit Aadhaar number";
+
+                }
+
+                else if (this.value === "visa") {
+
+                    documentLabel.textContent =
+                        "VISA Number:";
+
+                    documentInput.placeholder =
+                        "Enter VISA number";
+
+                }
+
+                else {
+
+                    documentLabel.textContent =
+                        "Document Number:";
+
+                    documentInput.placeholder =
+                        "";
+
+                }
+
+            }
+        );
+
+    </script>
+
+</body>
+
+</html>
